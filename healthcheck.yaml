@@ -1,0 +1,40 @@
+---
+apiVersion: kuberhealthy.github.io/v2
+kind: HealthCheck
+metadata:
+  name: kuberhealthy-github-reachable
+  namespace: kuberhealthy
+spec:
+  runInterval: 30m
+  timeout: 10m
+  podSpec:
+    spec:
+      containers:
+        - name: kuberhealthy-github-reachable
+          image: kuberhealthy/network-connection-check:sha-<short-sha>
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: CONNECTION_TARGET
+              value: "tcp://github.com:443"
+      restartPolicy: Never
+---
+apiVersion: kuberhealthy.github.io/v2
+kind: HealthCheck
+metadata:
+  name: kuberhealthy-metadata-unreachable
+  namespace: kuberhealthy
+spec:
+  runInterval: 30m
+  timeout: 10m
+  podSpec:
+    spec:
+      containers:
+        - name: kuberhealthy-metadata-unreachable
+          image: kuberhealthy/network-connection-check:sha-<short-sha>
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: CONNECTION_TARGET
+              value: "tcp://169.254.169.254:80"
+            - name: CONNECTION_TARGET_UNREACHABLE
+              value: "true"
+      restartPolicy: Never
