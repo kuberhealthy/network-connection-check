@@ -1,44 +1,23 @@
-# network-connection-check
+# Network Connection Check
 
-The `network-connection-check` validates TCP/UDP connectivity to a target address. It reports success when the connection behavior matches the expected reachability.
+Kuberhealthy's network connection check
 
-## Configuration
+## What it is
+This repository builds the container image used by Kuberhealthy to run the network-connection-check check.
 
-Set these environment variables in the `HealthCheck` spec:
+## Image
+- `docker.io/kuberhealthy/network-connection-check`
+- Tags: short git SHA for `main` pushes and `vX.Y.Z` for releases.
 
-- `CONNECTION_TARGET` (required): target address to dial. Accepts `tcp://` or `udp://` prefixes (for example, `tcp://github.com:443`).
-- `CONNECTION_TARGET_UNREACHABLE` (optional): set to `true` when the target is expected to be unreachable.
-- `KUBECONFIG` (optional): explicit kubeconfig path for local development.
+## Quick start
+- Apply the example manifest: `kubectl apply -f healthcheck.yaml`
+- Edit the manifest to set any required inputs for your environment.
 
-The check timeout defaults to 20 seconds but is overridden by the Kuberhealthy run deadline when available.
+## Build locally
+- `docker build -f ./Containerfile -t kuberhealthy/network-connection-check:dev .`
 
-## Build
+## Contributing
+Issues and PRs are welcome. Please keep changes focused and add a short README update when behavior changes.
 
-- `just build` builds the container image locally.
-- `just test` runs unit tests.
-- `just binary` builds the binary in `bin/`.
-
-## Example HealthCheck
-
-Apply the example below or the provided `healthcheck.yaml`:
-
-```yaml
-apiVersion: kuberhealthy.github.io/v2
-kind: HealthCheck
-metadata:
-  name: kuberhealthy-github-reachable
-  namespace: kuberhealthy
-spec:
-  runInterval: 30m
-  timeout: 10m
-  podSpec:
-    spec:
-      containers:
-        - name: kuberhealthy-github-reachable
-          image: kuberhealthy/network-connection-check:sha-<short-sha>
-          imagePullPolicy: IfNotPresent
-          env:
-            - name: CONNECTION_TARGET
-              value: "tcp://github.com:443"
-      restartPolicy: Never
-```
+## License
+See `LICENSE`.
