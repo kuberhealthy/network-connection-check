@@ -23,48 +23,62 @@ type Checker struct {
 	checkTimeout time.Duration
 }
 
+type connectionCheckResult struct {
+	// contextErr is set when the check context is done before dialing begins.
+	contextErr error
+	// dialErr is set when the check could not establish a connection.
+	dialErr error
+	// closeErr is set when the check connected but failed to close cleanly.
+	closeErr error
+}
+
 // Run implements the entrypoint for check execution.
 func (ncc *Checker) Run(ctx context.Context, cancel context.CancelFunc, client *kubernetes.Clientset) error {
 	// Log the start of the check.
 	log.Infoln("Running network connection checker")
 
-	// Prepare a completion channel and timeout.
-	doneChan := make(chan error)
-	runTimeout := time.After(ncc.checkTimeout)
-
 	// Store the client for parity with v2 behavior.
 	ncc.client = client
 
-	// Run the check in the background.
-	go ncc.runChecksAsync(doneChan)
-
-	// Wait for timeout or completion.
-	select {
-	case <-ctx.Done():
-		log.Infoln("Cancelling check and shutting down due to interrupt.")
-		return reportFailure("Cancelling check and shutting down due to interrupt.")
-	case <-runTimeout:
-		cancel()
-		log.Infoln("Cancelling check and shutting down due to timeout.")
-		return reportFailure(timeoutErrorMessage)
-	case err := <-doneChan:
-		cancel()
-		if err != nil && !ncc.targetUnreachable {
-			return reportFailure(err.Error())
-		}
+	result := ncc.doChecks(ctx)
+	cancel()
+	checkPassed, message := ncc.evaluateResult(result)
+	if checkPassed {
 		return reportSuccess()
 	}
+	return reportFailure(message)
 }
 
-// runChecksAsync runs the connection check and sends the result on the channel.
-func (ncc *Checker) runChecksAsync(doneChan chan error) {
-	// Execute the checks and forward results.
-	err := ncc.doChecks()
-	doneChan <- err
+func (ncc *Checker) evaluateResult(result connectionCheckResult) (bool, string) {
+	if result.contextErr != nil {
+		return false, "Network connection check did not run before the check context ended: " + result.contextErr.Error()
+	}
+
+	if ncc.targetUnreachable {
+		if result.dialErr != nil {
+			return true, ""
+		}
+		if result.closeErr != nil {
+			return false, "Network connection check determined that " + ncc.connectionTarget + " is UP but the connection did not close cleanly: " + result.closeErr.Error()
+		}
+		return false, "Network connection check determined that " + ncc.connectionTarget + " is UP but expected it to be unreachable"
+	}
+
+	if result.dialErr != nil {
+		return false, result.dialErr.Error()
+	}
+	if result.closeErr != nil {
+		return false, result.closeErr.Error()
+	}
+	return true, ""
 }
 
 // doChecks validates the network connection call to the endpoint.
-func (ncc *Checker) doChecks() error {
+func (ncc *Checker) doChecks(ctx context.Context) connectionCheckResult {
+	if err := ctx.Err(); err != nil {
+		return connectionCheckResult{contextErr: err}
+	}
+
 	// Split the network and address for dialing.
 	network, address := splitAddress(ncc.connectionTarget)
 
@@ -79,20 +93,20 @@ func (ncc *Checker) doChecks() error {
 
 	// Dial the target with a timeout.
 	dialer := net.Dialer{LocalAddr: localAddr, Timeout: ncc.checkTimeout}
-	conn, err := dialer.Dial(network, address)
+	conn, err := dialer.DialContext(ctx, network, address)
 	if err != nil {
 		errorMessage := "Network connection check determined that " + ncc.connectionTarget + " is DOWN: " + err.Error()
 		log.Errorln(errorMessage)
-		return errors.New(errorMessage)
+		return connectionCheckResult{dialErr: errors.New(errorMessage)}
 	}
 
 	// Close the connection.
 	err = conn.Close()
 	if err != nil {
-		return errors.New(err.Error())
+		return connectionCheckResult{closeErr: errors.New(err.Error())}
 	}
 
-	return nil
+	return connectionCheckResult{}
 }
 
 // splitAddress splits a network address into transport protocol and host:port.
