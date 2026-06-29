@@ -11,7 +11,7 @@ spec:
     spec:
       containers:
         - name: kuberhealthy-github-reachable
-          image: ghcr.io/kuberhealthy/network-connection-check:v0.1.0
+          image: ghcr.io/kuberhealthy/network-connection-check:v0.1.1
           imagePullPolicy: IfNotPresent
           env:
             - name: CONNECTION_TARGET
@@ -30,7 +30,7 @@ spec:
     spec:
       containers:
         - name: kuberhealthy-metadata-unreachable
-          image: ghcr.io/kuberhealthy/network-connection-check:v0.1.0
+          image: ghcr.io/kuberhealthy/network-connection-check:v0.1.1
           imagePullPolicy: IfNotPresent
           env:
             - name: CONNECTION_TARGET
